@@ -1,13 +1,13 @@
-# Sistemas Distribuidos y Cómputo Paralelo (SDyPP) - Clase 01
+# Sistemas Distribuidos y Programación Paralela (SDyPP) - Mini-Nube
 
 Servidor HTTP liviano desarrollado en Python para la simulación de despliegues manuales, traspaso de mando y gestión de concurrencia sobre un puerto TCP compartido.
 
 ---
 
 ## 👥 Integrantes del Equipo
-* **Tomás**
-* **Salvador**
-* **Mateo N.**
+* **Tomás Resnik** — Legajo 190168
+* **Mateo Nomico** — Legajo 168102
+* **Salvador Baez** — Legajo 195157
 
 ---
 
@@ -35,14 +35,6 @@ Cuando el proceso recibe una señal de detención (`kill <PID>` o `Ctrl+C`):
 1. **Deja de aceptar nuevas conexiones** cerrando el listener del socket TCP de inmediato (liberando el puerto para el siguiente despliegue).
 2. **Drena las conexiones activas**: Espera a que las peticiones HTTP que ya se encontraban en curso (en ejecución en sus respectivas hebras) terminen de procesarse y responder al cliente.
 3. **Apaga el proceso de forma limpia** sin dejar sockets colgados en estado `TIME_WAIT`.
-
----
-
-#### 💡 Justificación Técnica en Sistemas Distribuidos
-En un escenario donde múltiples equipos comparten un mismo servidor y puerto TCP, los despliegues implican un traspaso de mando. 
-
-* **Toma Hostil / `kill -9` (`SIGKILL`)**: Interrumpe la memoria del proceso de forma abrupta. Si un cliente estaba enviando un paquete o esperando respuesta, recibe un error fatal de red (`Connection reset by peer`). Además, el Socket TCP puede quedar retenido por el SO en `TIME_WAIT`.
-* **Traspaso Ordenado / `kill -15` (`SIGTERM`) con Graceful Shutdown**: Otorga tolerancia a fallos y consistencia. Garantiza cero pérdida de datos en los clientes en vuelo y asegura que el puerto TCP quede libre exactamente en el momento en que se libera la app anterior.
 
 ---
 
@@ -80,15 +72,3 @@ Para demostrar este aporte en vivo ante la cátedra:
      [ Graceful Shutdown ] Puerto TCP liberado y servidor detenido exitosamente.
      ```
    * El puerto 8000 queda inmediatamente disponible para que otro integrante pueda levantar su app sin sufrir la colisión pasiva (`Address already in use`).
-
----
-
-## 🛠️ Ejecución Local
-
-```bash
-# Ejecutar en puerto por defecto (8000)
-python3 Clase01/app.py
-
-# O especificar un puerto personalizado
-python3 Clase01/app.py 8080
-```

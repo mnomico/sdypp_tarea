@@ -12,7 +12,11 @@ from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 # --- Configuración de la aplicación ---
 APP_NAME = "python"
 LENGUAJE = f"Python {platform.python_version()}"
-EQUIPO = ["Tomás", "Salvador", "Mateo N."]  # Completar con los integrantes del equipo
+EQUIPO = [
+    "Tomás Resnik (Legajo 190168)",
+    "Mateo Nomico (Legajo 168102)",
+    "Salvador Baez (Legajo 195157)",
+]
 VERSION = 1
 MENSAJE = "hola mundo python"
 
