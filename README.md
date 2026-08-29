@@ -22,6 +22,97 @@ Servidor HTTP liviano desarrollado en Python para la simulación de despliegues 
 
 ---
 
+## 🏗️ Diagrama de Arquitectura
+
+Tres casas, ninguna en la misma red, coordinadas por Meet/Discord. El equipo **Plataforma** monta
+el servidor compartido y reparte el acceso; **App Java** y **App Python** compiten por el mismo
+puerto de producción, que es el recurso compartido en exclusión mutua. La conectividad entre casas
+se resuelve con una **tailnet (Tailscale)**, para no exponer el puerto ni el acceso de deploy
+directamente a internet.
+
+```mermaid
+flowchart TB
+    subgraph Tailnet["🔒 Tailnet — VPN mesh entre las 3 casas"]
+        direction LR
+        NP((Nodo Plataforma))
+        NJ((Nodo App Java))
+        NPY((Nodo App Python))
+        NP --- NJ
+        NP --- NPY
+    end
+
+    subgraph CasaPlataforma["🏠 Casa Plataforma — equipo Plataforma"]
+        SRV["Servidor compartido<br/>(PC / Raspberry)"]
+        PORT{{"Puerto :8000<br/>recurso en exclusión mutua"}}
+        SSH["Acceso de deploy<br/>(SSH / Tailscale SSH)"]
+        SRV --> PORT
+        SRV --> SSH
+    end
+    NP === SRV
+
+    subgraph CasaJava["🏠 Casa App Java"]
+        JAR["mvn/gradle build → .jar"]
+    end
+    NJ === JAR
+
+    subgraph CasaPython["🏠 Casa App Python — este repo"]
+        PY["Clase01/app.py<br/>Tomás · Mateo · Salvador"]
+    end
+    NPY === PY
+
+    JAR -- "Ship: scp/rsync .jar<br/>+ Stop/Start remoto" --> SSH
+    PY -- "Ship: scp/rsync app.py<br/>+ Stop/Start remoto" --> SSH
+    SSH -.->|"controla quién<br/>ocupa el puerto"| PORT
+
+    CLIENT(("Cualquier casa<br/>GET /, /health, POST /echo")) -- HTTP --> PORT
+
+    style PORT fill:#f96,stroke:#333,stroke-width:2px
+```
+
+**Qué expone cada nodo:**
+- **Plataforma**: el puerto de producción (HTTP, hoy solo lo tiene una app a la vez) + el acceso
+  de deploy (canal para que los otros dos equipos suban su artefacto y controlen el proceso).
+- **App Java / App Python**: nada hacia afuera directamente — despliegan *sobre* el nodo de
+  Plataforma, no exponen servidor propio.
+- **Recurso compartido y disputado**: el puerto `:8000` del servidor de Plataforma. Solo un
+  proceso lo escucha a la vez; desplegar es un traspaso (parar al que está, recién ahí escuchar).
+
+---
+
+## 🔄 Diagrama de Flujo del Pipeline (Build → Ship → Stop → Start → Verify)
+
+```mermaid
+flowchart TD
+    START(["Equipo decide desplegar<br/>cambio trivial: version + mensaje"]) --> BUILD
+
+    BUILD["Build<br/>Java: mvn/gradle → .jar<br/>Python: N/A, no compila"] --> SHIP
+    SHIP["Ship<br/>scp/rsync del artefacto<br/>al servidor de Plataforma"] --> CHECK
+
+    CHECK{"⚠️ Contención de puerto:<br/>¿:8000 está libre?"} -- "No, sigue sirviendo<br/>la versión anterior" --> COLISION
+
+    COLISION["Colisión PASIVA<br/>(si no se coordinó el Stop):<br/>arranca igual → Address already in use<br/>el deploy nuevo NO toma el puerto"] --> STOP
+
+    STOP["Stop coordinado<br/>por Meet/Discord: identificar el PID<br/>que tiene :8000 y frenar SOLO ese proceso<br/>(nunca una toma hostil sin acuerdo)"] --> FREE
+
+    CHECK -- "Sí, libre" --> FREE
+    FREE["Puerto liberado"] --> STARTSTEP
+
+    STARTSTEP["Start<br/>levantar el nuevo proceso en background<br/>nohup / tmux / systemd --user,<br/>que sobreviva al cierre de la sesión remota"] --> VERIFY
+
+    VERIFY{"Verify — desde OTRA casa:<br/>GET /health → 200 status:ok?<br/>GET / → version/mensaje nuevos?"}
+    VERIFY -- "No / timeout" --> STOP
+    VERIFY -- "Sí" --> DONE(["Deploy verificado ✅"])
+
+    style CHECK fill:#f96,stroke:#333,stroke-width:2px
+    style COLISION fill:#f66,stroke:#333,stroke-width:2px
+```
+
+En la demo del martes se provoca la **colisión pasiva a propósito** (dos equipos intentan
+desplegar a la vez sin coordinar el Stop), se la reconoce por el error `Address already in use`,
+y recién después se muestra el traspaso ordenado (Stop coordinado → Start → Verify).
+
+---
+
 ## 🌟 Aportes Propios Justificados
 
 ---
