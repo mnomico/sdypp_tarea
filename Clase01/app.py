@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import platform
@@ -24,6 +25,17 @@ MENSAJE = "hola mundo python"
 HOST = os.environ.get("HOST", socket.gethostname())
 ARRANCADO = datetime.now().astimezone().isoformat()
 
+def calculate_checksum() -> str:
+    """Calcula el hash SHA-256 del propio archivo fuente en tiempo de arranque."""
+    try:
+        app_path = os.path.abspath(__file__)
+        with open(app_path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception as e:
+        return f"error: {str(e)}"
+
+CHECKSUM = calculate_checksum()
+
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # Normalizar la ruta ignorando query params y trailing slash
@@ -37,6 +49,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "lenguaje": LENGUAJE,
                 "equipo": EQUIPO,
                 "version": VERSION,
+                "checksum": CHECKSUM,
                 "mensaje": MENSAJE,
                 "host": HOST,
                 "arrancado": ARRANCADO,
@@ -47,6 +60,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "status": "ok",
                 "app": APP_NAME,
                 "version": VERSION,
+                "checksum": CHECKSUM,
             }
             self._send_json(200, response_data)
         elif path == "/slow":
@@ -118,7 +132,7 @@ def run(port: int = 8000):
     signal.signal(signal.SIGINT, stop_server)
     signal.signal(signal.SIGTERM, stop_server)
 
-    print(f"Servidor iniciado en http://0.0.0.0:{port} (PID: {os.getpid()}) (Arrancado: {ARRANCADO})")
+    print(f"Servidor iniciado en http://0.0.0.0:{port} (PID: {os.getpid()}) (SHA256: {CHECKSUM[:12]}...) (Arrancado: {ARRANCADO})")
     try:
         httpd.serve_forever()
     finally:

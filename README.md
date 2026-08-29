@@ -26,9 +26,9 @@ Servidor HTTP liviano desarrollado en Python para la simulación de despliegues 
 
 ---
 
-### Aporte 1: Graceful Shutdown & Drenado de Conexiones (Manejo de `SIGTERM` / `SIGINT`)
+### Aporte 1: Graceful Shutdown & Drenado de Conexiones
 
-#### 📌 ¿En qué consiste?
+#### ¿En qué consiste?
 Implementación de un manejador de señales a nivel del Sistema Operativo (`signal.SIGTERM` y `signal.SIGINT`) en el servidor `ThreadingHTTPServer`. 
 
 Cuando el proceso recibe una señal de detención (`kill <PID>` o `Ctrl+C`):
@@ -38,9 +38,7 @@ Cuando el proceso recibe una señal de detención (`kill <PID>` o `Ctrl+C`):
 
 ---
 
-#### 🧪 ¿Cómo probarlo en la Demo? (Paso a Paso)
-
-Para demostrar este aporte en vivo ante la cátedra:
+#### ¿Cómo probarlo?
 
 1. **Iniciar el servidor en una terminal**:
    ```bash
@@ -50,20 +48,20 @@ Para demostrar este aporte en vivo ante la cátedra:
 
 2. **Lanzar una petición en vuelo (lenta) desde otra terminal**:
    ```bash
-   curl -i http://localhost:8000/slow
+   curl -i http://<IP_ADDRESS>:8000/slow
    ```
    *(Esta petición tarda 4 segundos en responder).*
 
 3. **Inmediatamente (dentro de los 4 segundos), enviar la señal `SIGTERM` desde una tercera terminal**:
    ```bash
-   # Reemplazar 13826 por el PID real de tu servidor (o usar killall)
-   kill -15 13826
+   # Reemplazar <PID> por el PID real de tu servidor (o usar killall)
+   kill -15 <PID>
    
    # O directamente:
    killall python3
    ```
 
-4. **Resultado Observado (Éxito)**:
+4. **Resultado Observado**:
    * **En la terminal del `curl`**: La petición **NO se corta**. Espera sus 4 segundos y recibe un `200 OK` completo con el JSON de respuesta.
    * **En la terminal del servidor**: Se observa el log:
      ```text
@@ -72,3 +70,34 @@ Para demostrar este aporte en vivo ante la cátedra:
      [ Graceful Shutdown ] Puerto TCP liberado y servidor detenido exitosamente.
      ```
    * El puerto 8000 queda inmediatamente disponible para que otro integrante pueda levantar su app sin sufrir la colisión pasiva (`Address already in use`).
+
+---
+
+### Aporte 2: Hash de Integridad del Código en Tiempo de Ejecución (SHA-256)
+
+#### ¿En qué consiste?
+Al arrancar, la aplicación lee su propio archivo fuente (`app.py`), calcula su checksum criptográfico SHA-256 utilizando la librería estándar (`hashlib`) y lo expone en el campo `"checksum"` de las respuestas `GET /` y `GET /health`.
+
+---
+
+#### ¿Cómo probarlo?
+
+1. **Consultar el hash remoto desplegado**:
+   ```bash
+   curl -s http://<IP_ADDRESS>:8000/health
+   ```
+   *Respuesta recibida:*
+   ```json
+   {
+     "status": "ok",
+     "app": "python",
+     "version": 1,
+     "checksum": "a3f8b1c4e5..."
+   }
+   ```
+
+2. **Verificar localmente con sha256sum**:
+   ```bash
+   sha256sum Clase01/app.py
+   ```
+   Comprobar que el hash obtenido localmente coincide exactamente con el valor devuelto por el servidor remoto, confirmando la integridad.
