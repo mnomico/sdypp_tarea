@@ -1,8 +1,11 @@
 import json
 import os
 import platform
+import signal
 import socket
 import sys
+import threading
+import time
 from datetime import datetime
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -42,6 +45,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "version": VERSION,
             }
             self._send_json(200, response_data)
+        elif path == "/slow":
+            # Endpoint para probar Graceful Shutdown y Drenado de Conexiones en la demo
+            print("[/slow] Procesando petición lenta (simulando tarea de 4 segundos)...")
+            time.sleep(4)
+            response_data = {
+                "status": "ok",
+                "mensaje": "Petición lenta completada con éxito a pesar de recibir la orden de apagado.",
+                "app": APP_NAME,
+                "version": VERSION,
+            }
+            self._send_json(200, response_data)
+            print("[/slow] Petición lenta finalizada.")
         else:
             self._send_json(404, {"error": "Not Found"})
 
@@ -89,16 +104,31 @@ class RequestHandler(BaseHTTPRequestHandler):
 def run(port: int = 8000):
     server_address = ("0.0.0.0", port)
     httpd = ThreadingHTTPServer(server_address, RequestHandler)
-    print(f"Servidor iniciado en http://0.0.0.0:{port} (Arrancado: {ARRANCADO})")
+    
+    # Manejador de señales para Graceful Shutdown (SIGINT y SIGTERM)
+    def stop_server(signum, frame):
+        sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+        print(f"\n[ Graceful Shutdown ] Recibida señal {sig_name} (señal {signum}). Drenando conexiones y apagando servidor de forma limpia...")
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGINT, stop_server)
+    signal.signal(signal.SIGTERM, stop_server)
+
+    print(f"Servidor iniciado en http://0.0.0.0:{port} (PID: {os.getpid()}) (Arrancado: {ARRANCADO})")
     try:
         httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nDeteniendo servidor...")
     finally:
         httpd.server_close()
+        # Esperar a que las hebras de peticiones en curso (in-flight) finalicen
+        main_thread = threading.main_thread()
+        for t in threading.enumerate():
+            if t is not main_thread and t.is_alive():
+                t.join(timeout=10)
+        print("[ Graceful Shutdown ] Puerto TCP liberado y servidor detenido exitosamente.")
 
 
 if __name__ == "__main__":
     # Permite pasar el puerto como argumento o variable de entorno PORT (default: 8000)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8000))
     run(port)
+
