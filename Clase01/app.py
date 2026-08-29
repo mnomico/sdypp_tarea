@@ -36,8 +36,36 @@ def calculate_checksum() -> str:
 
 CHECKSUM = calculate_checksum()
 
+# Rate Limiting en Memoria (Sliding Window)
+RATE_LIMIT_MAX = 5       # Máximo de peticiones permitidas por cliente
+RATE_LIMIT_WINDOW = 10   # Ventana de tiempo en segundos
+rate_limit_history = {}
+rate_limit_lock = threading.Lock()
+
+def check_rate_limit(ip: str) -> bool:
+    """Retorna True si la IP superó el límite de peticiones en la ventana de tiempo."""
+    now = time.time()
+    with rate_limit_lock:
+        timestamps = rate_limit_history.get(ip, [])
+        valid_timestamps = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
+        if len(valid_timestamps) >= RATE_LIMIT_MAX:
+            rate_limit_history[ip] = valid_timestamps
+            return True
+        valid_timestamps.append(now)
+        rate_limit_history[ip] = valid_timestamps
+        return False
+
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        client_ip = self.client_address[0]
+        if check_rate_limit(client_ip):
+            self._send_json(429, {
+                "error": "Demasiadas peticiones (429 Too Many Requests)",
+                "mensaje": f"Se superó el límite de {RATE_LIMIT_MAX} peticiones cada {RATE_LIMIT_WINDOW} segundos.",
+                "ip": client_ip
+            })
+            return
+
         # Normalizar la ruta ignorando query params y trailing slash
         path = self.path.split("?")[0].rstrip("/")
         if path == "":
@@ -79,6 +107,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "Not Found"})
 
     def do_POST(self):
+        client_ip = self.client_address[0]
+        if check_rate_limit(client_ip):
+            self._send_json(429, {
+                "error": "Demasiadas peticiones (429 Too Many Requests)",
+                "mensaje": f"Se superó el límite de {RATE_LIMIT_MAX} peticiones cada {RATE_LIMIT_WINDOW} segundos.",
+                "ip": client_ip
+            })
+            return
+
         # Normalizar la ruta ignorando query params y trailing slash
         path = self.path.split("?")[0].rstrip("/")
         if path == "":

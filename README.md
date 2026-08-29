@@ -54,11 +54,8 @@ Cuando el proceso recibe una señal de detención (`kill <PID>` o `Ctrl+C`):
 
 3. **Inmediatamente (dentro de los 4 segundos), enviar la señal `SIGTERM` desde una tercera terminal**:
    ```bash
-   # Reemplazar <PID> por el PID real de tu servidor (o usar killall)
+   # Reemplazar <PID> por el PID real de tu servidor
    kill -15 <PID>
-   
-   # O directamente:
-   killall python3
    ```
 
 4. **Resultado Observado**:
@@ -101,3 +98,30 @@ Al arrancar, la aplicación lee su propio archivo fuente (`app.py`), calcula su 
    sha256sum Clase01/app.py
    ```
    Comprobar que el hash obtenido localmente coincide exactamente con el valor devuelto por el servidor remoto, confirmando la integridad.
+
+---
+
+### Aporte 3: Rate Limiting en Memoria (Protección contra Sobrecarga)
+
+#### ¿En qué consiste?
+Implementación de un limitador de tasa mediante el algoritmo de ventana deslizante en memoria (`Sliding Window`). Cada cliente (IP) puede realizar un máximo de 5 peticiones cada 10 segundos. Al superar este límite, el servidor bloquea temporalmente al cliente respondiendo con código HTTP `429 Too Many Requests`.
+
+---
+
+#### ¿Cómo probarlo?
+
+1. **Enviar ráfaga de peticiones continuas**:
+   ```bash
+   for i in {1..6}; do curl -s -i http://<IP_ADDRESS>:8000/health | head -n 1; done
+   ```
+
+2. **Resultado Observado**:
+   * Peticiones 1 a 5: `HTTP/1.0 200 OK`
+   * Petición 6: `HTTP/1.0 429 Too Many Requests` con el JSON de error:
+     ```json
+     {
+       "error": "Demasiadas peticiones (429 Too Many Requests)",
+       "mensaje": "Se superó el límite de 5 peticiones cada 10 segundos.",
+       "ip": "<IP_ADDRESS>"
+     }
+     ```
