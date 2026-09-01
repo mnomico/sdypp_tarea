@@ -57,19 +57,18 @@ def check_rate_limit(ip: str) -> bool:
 
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        client_ip = self.client_address[0]
-        if check_rate_limit(client_ip):
+        path = self._normalize_path()
+        client_ip = self._client_ip()
+
+        # /health queda exento del rate limiting: es el chequeo del paso Verify del
+        # pipeline y las otras casas lo consultan en ráfaga durante el traspaso.
+        if path != "/health" and check_rate_limit(client_ip):
             self._send_json(429, {
                 "error": "Demasiadas peticiones (429 Too Many Requests)",
                 "mensaje": f"Se superó el límite de {RATE_LIMIT_MAX} peticiones cada {RATE_LIMIT_WINDOW} segundos.",
                 "ip": client_ip
             })
             return
-
-        # Normalizar la ruta ignorando query params y trailing slash
-        path = self.path.split("?")[0].rstrip("/")
-        if path == "":
-            path = "/"
 
         if path == "/":
             response_data = {
@@ -107,7 +106,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "Not Found"})
 
     def do_POST(self):
-        client_ip = self.client_address[0]
+        path = self._normalize_path()
+        client_ip = self._client_ip()
         if check_rate_limit(client_ip):
             self._send_json(429, {
                 "error": "Demasiadas peticiones (429 Too Many Requests)",
@@ -115,11 +115,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "ip": client_ip
             })
             return
-
-        # Normalizar la ruta ignorando query params y trailing slash
-        path = self.path.split("?")[0].rstrip("/")
-        if path == "":
-            path = "/"
 
         if path == "/echo":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -144,6 +139,25 @@ class RequestHandler(BaseHTTPRequestHandler):
         else:
             self._send_json(404, {"error": "Not Found"})
 
+    def _normalize_path(self) -> str:
+        """Normaliza la ruta ignorando query params y trailing slash."""
+        path = self.path.split("?")[0].rstrip("/")
+        return path if path else "/"
+
+    def _client_ip(self) -> str:
+        """IP real del cliente.
+
+        La app se sirve detrás del túnel HTTP de ngrok, así que todas las peticiones
+        llegan a la app desde la misma IP local (el proxy de Docker). Sin esto, el
+        rate limiting trataría a todas las casas como un único cliente y bloquearía
+        a la clase entera a la sexta petición. ngrok informa la IP de origen en
+        X-Forwarded-For; nos quedamos con la primera de la cadena.
+        """
+        forwarded = self.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return self.client_address[0]
+
     def _send_json(self, status_code: int, data: dict):
         response_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status_code)
@@ -156,7 +170,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         print(f"[{self.log_date_time_string()}] {self.address_string()} - {format % args}")
 
 
-def run(port: int = 8000):
+def run(port: int = 8080):
     server_address = ("0.0.0.0", port)
     httpd = ThreadingHTTPServer(server_address, RequestHandler)
     
@@ -183,7 +197,7 @@ def run(port: int = 8000):
 
 
 if __name__ == "__main__":
-    # Permite pasar el puerto como argumento o variable de entorno PORT (default: 8000)
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8000))
+    # Permite pasar el puerto como argumento o variable de entorno PORT (default: 8080)
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8080))
     run(port)
 
