@@ -42,12 +42,12 @@ flowchart TB
     subgraph PLAT["Casa Plataforma - PC Windows con WSL2 - el cloud provider"]
         AG["2 agentes ngrok<br/>su inspector web guarda request y response<br/>de las dos apps, en texto plano"]
         subgraph CT["Contenedor Docker - Ubuntu 24.04"]
-            APP["La app que gano el puerto<br/>java -jar tp1.jar 8080<br/>o python3 app-python.py 8080"]
-            PORT{{"PUERTO 8080<br/>RECURSO EN EXCLUSION MUTUA<br/>lo escucha UN solo proceso"}}
+            APP["La app que gano el puerto<br/>java -jar tp1.jar 80<br/>o python3 app-python.py 80"]
+            PORT{{"PUERTO 80 DEL CONTENEDOR<br/>RECURSO EN EXCLUSION MUTUA<br/>lo escucha UN solo proceso"}}
             SSHD["sshd del contenedor<br/>cuenta de deploy COMPARTIDA<br/>mismo directorio para los dos equipos"]
             APP --> PORT
         end
-        AG -->|"localhost 8080"| PORT
+        AG -->|"localhost 8080 al 80 del contenedor"| PORT
         AG -->|"localhost 2222 al 22 del contenedor"| SSHD
     end
 
@@ -80,7 +80,7 @@ flowchart TB
   recurso: si apagan un agente, el equipo que dependía de ese túnel queda afuera.
 - **App Java / App Python** no exponen nada hacia afuera. Despliegan *sobre* el nodo de Plataforma,
   no corren servidor propio.
-- **Recurso compartido y disputado**: el puerto `8080` del contenedor. Un puerto TCP lo escucha un
+- **Recurso compartido y disputado**: el puerto `80` del contenedor (publicado como el `8080` del host). Un puerto TCP lo escucha un
   solo proceso a la vez, así que desplegar no es "instalar al lado": es un **traspaso**.
 
 **Asimetría entre los dos túneles.** El de producción usa un dominio estático y sobrevive a los
@@ -108,19 +108,19 @@ flowchart TD
     CAIDO --> SHIP
     TUNEL -->|"Si"| CHECK
 
-    CHECK{"CONTENCION DEL PUERTO<br/>el 8080 esta libre?"}
+    CHECK{"CONTENCION DEL PUERTO<br/>el 80 esta libre?"}
     CHECK -->|"No, lo tiene la otra app"| COLISION
     CHECK -->|"Si"| STARTP
 
     COLISION["COLISION PASIVA - se provoca a proposito en la demo<br/>arrancar sin frenar al anterior da Address already in use<br/>la app nueva NO toma el puerto y la vieja sigue sirviendo"] --> STOP
 
-    STOP["3 - STOP coordinado<br/>identificar el PID que tiene el 8080 y mandarle SIGTERM<br/>nunca kill -9: cortaria las peticiones en vuelo<br/>el graceful shutdown drena y recien ahi libera el puerto"] --> STARTP
+    STOP["3 - STOP coordinado<br/>identificar el PID que tiene el 80 y mandarle SIGTERM<br/>nunca kill -9: cortaria las peticiones en vuelo<br/>el graceful shutdown drena y recien ahi libera el puerto"] --> STARTP
 
     STARTP["4 - START<br/>levantar con nohup en segundo plano<br/>para que sobreviva al cierre de la sesion SSH"] --> VERIFY
 
     VERIFY{"5 - VERIFY, DESDE OTRA CASA<br/>curl a la URL publica con el header de ngrok"}
     VERIFY -->|"404 ERR_NGROK_3200"| E404["El tunel HTTP esta caido<br/>es del lado de Plataforma"]
-    VERIFY -->|"502"| E502["El tunel vive pero nadie escucha en 8080<br/>se cayo el Start"]
+    VERIFY -->|"502"| E502["El tunel vive pero nadie escucha en 80<br/>se cayo el Start"]
     E502 --> STARTP
     VERIFY -->|"Llega HTML en vez de JSON"| EHTML["Falta el header ngrok-skip-browser-warning<br/>es la pantalla de aviso del plan free"]
     EHTML --> VERIFY
@@ -147,7 +147,7 @@ ps aux | grep -E 'java|python3'
 kill <PID>
 
 # 4 · Start
-nohup python3 ~/app-python.py 8080 > ~/python.log 2>&1 &
+nohup python3 ~/app-python.py 80 > ~/python.log 2>&1 &
 
 # 5 · Verify  (desde otra casa)
 curl -s -H "ngrok-skip-browser-warning: 1" https://<DOMINIO>.ngrok-free.dev/
@@ -265,3 +265,19 @@ Implementación de un limitador de tasa mediante el algoritmo de ventana desliza
        "ip": "<IP_ADDRESS>"
      }
      ```
+
+## 🌶️ Mejoras al Enunciado
+
+Tres huecos de la consigna que encontramos montando esto.
+
+### 1. Pide exclusión mutua, pero no da con qué construirla
+**Qué:** exigir una cuenta de sistema por equipo y un archivo de dueño en el servidor (PID, equipo, hora de arranque) que haya que leer antes de frenar nada.
+**Por qué:** los tres equipos entramos con el mismo usuario, así que no existe la noción de "dueño" de un proceso: cualquiera puede matar cualquier cosa y nadie puede probar quién fue. La consigna pregunta si se puede lograr que sólo el dueño mate su proceso, pero el armado que habilita lo vuelve imposible.
+
+### 2. El pipeline no tiene salida de emergencia
+**Qué:** un sexto paso obligatorio, Rollback, y que el Ship deje los artefactos versionados en vez de sobrescribir.
+**Por qué:** la secuencia termina en Verify y no dice qué hacer si Verify falla. Para ese momento el proceso viejo ya está muerto y el artefacto anterior pisado (le pasó a Java, la v2 sobrescribió a la v1), así que producción queda caída sin camino de vuelta.
+
+### 3. Las preguntas de seguridad miran el disco, no el tráfico
+**Qué:** que el contrato incluya una ruta que maneje un dato sensible (un token en un header) y que cada equipo explique, salto por salto, quién puede leerlo.
+**Por qué:** la consigna pregunta qué le impide a Plataforma leer el código ajeno, pero el agujero más grande es otro: toda la conectividad pasa por el túnel que ellos montan, y su inspector les muestra cada petición y respuesta completas de las dos apps en texto plano.

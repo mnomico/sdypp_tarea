@@ -170,7 +170,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         print(f"[{self.log_date_time_string()}] {self.address_string()} - {format % args}")
 
 
-def run(port: int = 8080):
+def run(port: int = 80):
     server_address = ("0.0.0.0", port)
     httpd = ThreadingHTTPServer(server_address, RequestHandler)
     
@@ -197,7 +197,8 @@ def run(port: int = 8080):
 
 
 if __name__ == "__main__":
-    # Permite pasar el puerto como argumento o variable de entorno PORT (default: 8080)
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8080))
+    # Permite pasar el puerto como argumento o variable de entorno PORT (default: 80,
+    # el puerto real expuesto desde el contenedor del servidor compartido)
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 80))
     run(port)
 
