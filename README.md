@@ -11,6 +11,13 @@ Servidor HTTP liviano desarrollado en Python para la simulación de despliegues 
 
 ---
 
+## Comandos 
+
+* python3 -m venv .venv
+* source .venv/bin/activate (Segun el sistema operativo usar el comando correspondiente)
+* pip install -r requirements.txt
+* python3 app.py 8081
+
 ## 🚀 Endpoints de la Aplicación
 
 | Método | Ruta | Descripción |

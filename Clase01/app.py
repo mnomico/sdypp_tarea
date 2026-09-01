@@ -9,6 +9,7 @@ import threading
 import time
 from datetime import datetime
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
+import yaml
 
 # --- Configuración de la aplicación ---
 APP_NAME = "python"
