@@ -68,9 +68,9 @@ flowchart TB
     VER(("Verify DESDE OTRA CASA<br/>GET / - GET /health - POST /echo"))
     VER -->|"curl con el header de ngrok"| T1
 
-    style PORT fill:#f96,stroke:#333,stroke-width:3px
-    style T2 fill:#f7e3b5,stroke:#333
-    style T1 fill:#cfe8d4,stroke:#333
+    style PORT fill:#f96,stroke:#333,stroke-width:3px,color:#111
+    style T2 fill:#f7e3b5,stroke:#333,color:#111
+    style T1 fill:#cfe8d4,stroke:#333,color:#111
 ```
 
 **Qué expone cada nodo:**
@@ -126,8 +126,8 @@ flowchart TD
     EHTML --> VERIFY
     VERIFY -->|"200 con la app y la version nuevas"| OK(["Deploy verificado<br/>anotar el downtime entre el SIGTERM y el primer 200"])
 
-    style CHECK fill:#f96,stroke:#333,stroke-width:3px
-    style COLISION fill:#f66,stroke:#333,stroke-width:2px
+    style CHECK fill:#f96,stroke:#333,stroke-width:3px,color:#111
+    style COLISION fill:#f66,stroke:#333,stroke-width:2px,color:#111
 ```
 
 Los comandos exactos de cada paso:
