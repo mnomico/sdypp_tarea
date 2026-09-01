@@ -266,7 +266,7 @@ Implementación de un limitador de tasa mediante el algoritmo de ventana desliza
      }
      ```
 
-## 🌶️ Mejoras al Enunciado
+## Mejoras al Enunciado
 
 Tres huecos de la consigna que encontramos montando esto.
 
@@ -281,3 +281,29 @@ Tres huecos de la consigna que encontramos montando esto.
 ### 3. Las preguntas de seguridad miran el disco, no el tráfico
 **Qué:** que el contrato incluya una ruta que maneje un dato sensible (un token en un header) y que cada equipo explique, salto por salto, quién puede leerlo.
 **Por qué:** la consigna pregunta qué le impide a Plataforma leer el código ajeno, pero el agujero más grande es otro: toda la conectividad pasa por el túnel que ellos montan, y su inspector les muestra cada petición y respuesta completas de las dos apps en texto plano.
+
+---
+
+## Preguntas de Análisis Distribuidos
+
+El puerto TCP de producción es el recurso crítico y el único árbitro físico que garantiza la exclusión mutua es el kernel del servidor al procesar la syscall `bind()`, rebotando cualquier intento concurrente con el error `Address already in use`. En la arquitectura de esta tarea la exclusión mutua es de carácter centralizado, ya que no existe un protocolo de consenso distribuido entre las casas de los integrantes y toda la contención se resuelve en el único servidor de Plataforma. La coordinación entre equipos fuera del sistema operativo se sostiene de forma puramente social mediante acuerdos por canal de chat.
+
+Si dos equipos intentan desplegar al mismo tiempo se produce una condición de carrera no determinista dictada por el scheduling del kernel y la latencia de la red. En una colisión pasiva la aplicación que primero logra ejecutar la llamada `bind()` se queda con el puerto, mientras que la segunda falla inmediatamente al recibir el error de dirección en uso y finaliza. En una colisión activa donde se ejecutan comandos de detención sin coordinación previa, los procesos pueden matarse entre sí o corromper los archivos transferidos si comparten la misma ruta de subida.
+
+El pipeline manual carece de atomicidad y transaccionalidad, por lo que una caída de conectividad en pleno despliegue deja al sistema en un estado inconsistente. Si la falla ocurre durante la transferencia del artefacto el archivo queda incompleto en disco pero el servicio anterior continúa respondiendo. Si el corte sucede entre el frenado de la app anterior y la inicialización de la nueva, el puerto queda libre sin ningún proceso escuchando y se genera una denegación de servicio total. Si la conexión cae durante la ejecución y la app no fue desvinculada del pseudo-terminal remoto, la señal enviada por la sesión SSH terminada mata al proceso nuevo.
+
+Los pasos que evidenciaron la necesidad de automatización fueron stop, kill process, y levantar el proceso con controles de exclusión mutua.
+
+---
+
+## Preguntas Picantes
+
+Técnicamente a Mateo y Juan no les impide absolutamente nada leer, modificar o tumbar las aplicaciones ajenas. Al ser los administradores del servidor y del host tienen privilegios de superusuario que les permiten acceder al disco rígido, inspeccionar la memoria RAM de los procesos en ejecución, modificar los archivos subidos vía SSH o matar cualquier proceso con un comando. Tampoco existe cifrado en reposo o aislamiento que proteja el código frente al root del sistema. En un entorno de producción real nadie le confiaría código o datos sensibles a la máquina de un tercero sin garantías de computación confidencial o enclaves seguros; en este escenario la seguridad no se apoya en ningún control técnico sino en la pura confianza social entre compañeros.
+
+Cualquier equipo puede frenar la aplicación del otro simplemente porque todos acceden a través de la misma cuenta de sistema o con permisos suficientes para enviar señales a la tabla de procesos. Para evitar que un usuario apague el servicio ajeno por error o con mala intención se requiere implementar cuentas del sistema operativo independientes para cada equipo. El kernel de Linux prohíbe que un usuario no privilegiado le envíe señales como SIGTERM o SIGKILL a procesos que pertenecen a otro identificador de usuario. De este modo, la única forma de liberar el puerto de manera ordenada sin dar permisos cruzados de detención es mediante un proceso intermediario supervisor o un contrato de orchestración que valide la identidad del solicitante.
+
+Al publicar la computadora hogareña a internet mediante túneles o apertura de puertos, la máquina queda expuesta a escaneos automáticos de vulnerabilidades, ataques de fuerza bruta contra el puerto SSH y posibles ejecuciones remotas de código si las aplicaciones web contienen fallas. El peligro no se limita a esa PC sino que se extiende a toda la red local de la casa, ya que si un atacante logra comprometer el servidor puede realizar movimientos laterales hacia otros dispositivos conectados a la misma red WiFi o LAN. La responsabilidad legal y operativa recae de forma exclusiva sobre el dueño del equipo y titular del contrato de internet, cuya dirección IP pública es la que queda registrada ante cualquier actividad maliciosa originada desde su nodo.
+
+Para realizar el despliegue los equipos ingresan al servidor con acceso a una shell interactiva del sistema operativo. Si las credenciales otorgadas cuentan con permisos amplios o acceso al grupo de sudo o Docker, los integrantes no solo pueden desplegar su aplicación sino también inspeccionar archivos privados en el directorio del sistema, listar variables de entorno globales, consumir recursos de CPU y memoria provocando una denegación de servicio local, o incluso realizar un escape de contenedor hacia la máquina host de Windows. La gestión segura de accesos exigiría aplicar el principio de menor privilegio limitando a los usuarios mediante entornos restringidos y directorios aislados sin visión del resto del sistema.
+
+Cualquier credencial, token o contraseña que utilice la aplicación queda expuesta a la vista de los administradores y de cualquiera con acceso al servidor si se almacena en el código fuente, en archivos de configuración o en variables de entorno. Adicionalmente existe una trampa en el tráfico de red: al utilizar túneles de ngrok administrados por Plataforma, el inspector de tráfico integrado expone en texto plano el contenido de cada petición y respuesta HTTP. Toda clave enviada en los encabezados o en el cuerpo de las peticiones queda registrada y legible en la consola local del inspector para quien monta la infraestructura.
