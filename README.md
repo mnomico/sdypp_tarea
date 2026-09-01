@@ -99,9 +99,7 @@ frenó qué proceso.
 
 ```mermaid
 flowchart TD
-    START(["Cambio trivial en local<br/>subir VERSION y cambiar mensaje"]) --> AVISO
-    AVISO["Avisar por Discord<br/>vamos a tomar el 8080"] --> BUILD
-
+    START(["Cambio trivial en local<br/>subir VERSION y cambiar mensaje"]) --> BUILD
     BUILD["1 - BUILD<br/>Java compila con mvn hasta el .jar<br/>Python NO tiene este paso"] --> SHIP
     SHIP["2 - SHIP<br/>scp del archivo por el tunel TCP<br/>con nombre propio, sin pisar el .jar de Java"] --> TUNEL
 
